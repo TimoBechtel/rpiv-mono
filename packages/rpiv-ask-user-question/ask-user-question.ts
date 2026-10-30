@@ -28,6 +28,7 @@ import {
 import { type DialogUI, hasDialogUI, runRpcQuestionnaire } from "./rpc-fallback.ts";
 import { displayLabel, t } from "./state/i18n-bridge.ts";
 import { sentinelsToAppend } from "./state/row-intent.ts";
+import { blockTerminalStatus } from "./terminal-status.ts";
 import { normalizeQuestionParams, prepareQuestionArguments } from "./tool/normalize-params.ts";
 import { buildQuestionnaireResponse, buildToolResult } from "./tool/response-envelope.ts";
 import {
@@ -308,9 +309,18 @@ async function mountQuestionnaire(config: {
 	// may emit `setHidden` only when it was actually registered; otherwise collapse falls
 	// back to the visible one-line row.
 	const canReopenWhileHidden = removeOverlayInputListener !== undefined;
+	const factory = makeSessionFactory({ ...config, canReopenWhileHidden, sessionRef });
+	let releaseStatus: (() => void) | undefined;
 	try {
 		return await ctx.ui.custom<QuestionnaireResult>(
-			makeSessionFactory({ ...config, canReopenWhileHidden, sessionRef }),
+			(tui, theme, keybindings, done) => {
+				const component = factory(tui, theme, keybindings, done);
+				// Custom hosts and older Pi terminals may not support OSC 7501.
+				if (component !== INERT_COMPONENT && typeof tui.terminal.setProgramStatus === "function") {
+					releaseStatus = blockTerminalStatus({ terminal: tui.terminal, idle: ctx.isIdle() });
+				}
+				return component;
+			},
 			presentation.overlay
 				? {
 						overlay: true,
@@ -328,6 +338,7 @@ async function mountQuestionnaire(config: {
 				: { overlay: false },
 		);
 	} finally {
+		releaseStatus?.();
 		removeOverlayInputListener?.();
 	}
 }

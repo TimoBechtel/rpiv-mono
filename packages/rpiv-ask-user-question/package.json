@@ -32,6 +32,7 @@
 	"files": [
 		"answer-channel.ts",
 		"ask-user-question.ts",
+		"terminal-status.ts",
 		"rpc-fallback.ts",
 		"config.ts",
 		"events.ts",
